@@ -96,7 +96,7 @@ class SkinLesionCNN(nn.Module):
         
         def forward(self, x):
         x = F.relu(self.conv1(x))   # (28,28,16)
-        x = self.pool(x)            # (14,14,16)
+        x = self.pool(x)            
         x = self.bn1(x)
 
         x = F.relu(self.conv2(x))
