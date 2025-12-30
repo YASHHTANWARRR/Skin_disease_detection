@@ -10,17 +10,17 @@ from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 #directories
-basic_dir = "C:\\Users\\Hp\\Documents\\dataset folders\\skin disease dataset\\6GB HAM10000 DATA\\hmnist_28_28_RGB.csv"
-image1_dir = "C:\\Users\\Hp\\Documents\\dataset folders\\skin disease dataset\\6GB HAM10000 DATA\\HAM10000_images_part_1"
-image2_dir = "C:\\Users\\Hp\\Documents\\dataset folders\\skin disease dataset\\6GB HAM10000 DATA\\HAM10000_images_part_2"
-csv_dir = "C:\\Users\\Hp\\Documents\\dataset folders\\skin disease dataset\\6GB HAM10000 DATA\\HAM10000_metadata.csv"
-output_dir = "C:\\Users\\Hp\\Documents\\dataset folders\\skin disease dataset\\6GB HAM10000 DATA\\output_folder"
+basic_dir = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\hmnist_28_28_RGB.csv'
+image1_dir = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\HAM10000_images_part_1'
+image2_dir = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\HAM10000_images_part_2'
+csv_dir = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\HAM10000_metadata.csv'
+output_dir = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder'
 
 #output folders
 split = ['train', 'val', 'test']
 classes = ['akiec','bcc','bkl','df','mel','nv','vasc']
 
-for split in splits:
+for split in split:
     for cls in classes:
         os.makedirs(os.path.join(output_dir, split, cls), exist_ok=True)
 
@@ -56,4 +56,4 @@ copy_images(test_df, "test")
 
 print("Output folder created successfully.")
 
-#till here code needs to be run once for folder creation
+#code ends for dataset split
