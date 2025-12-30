@@ -9,17 +9,12 @@ import sklearn
 import torch.nn as nn
 import torchvision
 from sklearn.metrics import classification_report,f1_score,confusion_matrix,accuracy_score,precision_score,recall_score
-
-
+from torchvision.datasets import ImageFolder
+from torch.utils.data import DataLoader
 
 #device configuration
 device= torch.device('cuda' if torch.cuda.is_available() else'cpu')
 print(f'using device:',device)
-
-#dataset directories 
-test_split=r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\test'
-train_split=r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\train'
-val_split=r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\val'
 
 #transforming the training images for cnn
 train_transform=transforms.Compose([
@@ -48,5 +43,24 @@ val_transform= transforms.Compose([
                     std=[0.5,0.5,0.5])
 ])
 
+#dataset directories 
+test_split=r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\test'
+train_split=r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\train'
+val_split=r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\val'
 
+#image folders and dataloaders
+train_data=ImageFolder(root=train_split,transform=train_transform)
+test_data=ImageFolder(root=test_split,transform=test_transform)
+val_data=ImageFolder(root=val_split,transform=val_transform)
 
+train_loader=DataLoader(dataset=train_data,
+                        batch_size=32,
+                        shuffle=True)
+
+test_loader=DataLoader(dataset=test_data,
+                    batch_size=32,
+                    shuffle=False)
+
+val_loader=DataLoader(dataset=val_data,
+                    batch_size=32,
+                    shuffle=False)
