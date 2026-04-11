@@ -141,7 +141,7 @@ for epoch in range(epochs):
 
     train_loss = running_loss / len(train_data)
     train_acc = 100 * correct / total
-``
+
     model.eval()
     val_loss = 0.0
     val_correct = 0
