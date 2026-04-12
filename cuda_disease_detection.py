@@ -2,7 +2,7 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as F 
 
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -17,42 +17,56 @@ from sklearn.metrics import (
     accuracy_score,
     precision_score,
     recall_score,
-    f1_score
+    f1_score,
+    roc_curve,
+    auc
 )
+
+from sklearn.preprocessing import label_binarize
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+from PIL import Image
+
 
 # device configuration
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
+
 
 # transforms
 train_transform = transforms.Compose([
     transforms.Resize((28, 28)),
     transforms.RandomHorizontalFlip(p=0.5),
     transforms.RandomRotation(15),
-    transforms.ColorJitter(brightness=0.1, contrast=0.1,
-                        saturation=0.1, hue=0.1),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
 ])
 
-test_transform = transforms.Compose([
+val_transform = transforms.Compose([
     transforms.Resize((28, 28)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
 ])
 
-# dataset paths (FIX THESE)
+
+# dataset paths
 train_split = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_folder/train"
+val_split   = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_folder/val"
 test_split  = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_folder/test"
+
 
 # datasets and loaders
 train_data = ImageFolder(train_split, transform=train_transform)
-test_data  = ImageFolder(test_split, transform=test_transform)
+val_data   = ImageFolder(val_split, transform=val_transform)
+test_data  = ImageFolder(test_split, transform=val_transform)
 
 train_loader = DataLoader(train_data, batch_size=8, shuffle=True)
+val_loader   = DataLoader(val_data, batch_size=8, shuffle=False)
 test_loader  = DataLoader(test_data, batch_size=8, shuffle=False)
 
-# model (YOUR ORIGINAL)
+
+# model
 class SkinLesionCNN(nn.Module):
     def __init__(self):
         super(SkinLesionCNN, self).__init__()
@@ -97,18 +111,24 @@ class SkinLesionCNN(nn.Module):
 
         return self.out(x)
 
+
 # initialization
 model = SkinLesionCNN().to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-print(model)
 
-# training (CNN)
+# training and validation
 epochs = 5
+train_acc_list = []
+val_acc_list = []
+loss_list = []
+
 for epoch in range(epochs):
     model.train()
-    running_loss = 0.0
+    correct = 0
+    total = 0
+    running_loss = 0
 
     for images, labels in train_loader:
         images, labels = images.to(device), labels.to(device)
@@ -121,11 +141,56 @@ for epoch in range(epochs):
 
         running_loss += loss.item()
 
-    print(f"Epoch [{epoch+1}/{epochs}] Loss: {running_loss:.4f}")
+        _, preds = torch.max(outputs, 1)
+        correct += (preds == labels).sum().item()
+        total += labels.size(0)
 
-# feature extraction (IMPORTANT PART FOR RAPIDS)
+    train_acc = correct / total
+    loss_list.append(running_loss)
+
+    model.eval()
+    val_correct = 0
+    val_total = 0
+
+    with torch.no_grad():
+        for images, labels in val_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, preds = torch.max(outputs, 1)
+
+            val_correct += (preds == labels).sum().item()
+            val_total += labels.size(0)
+
+    val_acc = val_correct / val_total
+
+    train_acc_list.append(train_acc)
+    val_acc_list.append(val_acc)
+
+    print(f"Epoch {epoch+1}: Train={train_acc:.4f}, Val={val_acc:.4f}")
+
+
+# save model
+torch.save(model.state_dict(), "cnn_model.pth")
+
+
+# test CNN
 model.eval()
+cnn_preds = []
+cnn_labels = []
 
+with torch.no_grad():
+    for images, labels in test_loader:
+        images = images.to(device)
+        outputs = model(images)
+        _, preds = torch.max(outputs, 1)
+
+        cnn_preds.extend(preds.cpu().numpy())
+        cnn_labels.extend(labels.numpy())
+
+cnn_acc = accuracy_score(cnn_labels, cnn_preds)
+
+
+# RAPIDS feature extraction
 features = []
 labels_list = []
 
@@ -133,37 +198,28 @@ with torch.no_grad():
     for images, labels in train_loader:
         images = images.to(device)
 
-        # pass through conv layers ONLY
         x = model.pool(F.relu(model.conv1(images)))
         x = model.bn1(x)
-
         x = F.relu(model.conv2(x))
         x = model.pool(F.relu(model.conv3(x)))
         x = model.bn2(x)
-
         x = F.relu(model.conv4(x))
         x = F.relu(model.conv5(x))
-
         x = x.view(x.size(0), -1)
 
         features.append(x.cpu())
         labels_list.append(labels)
 
-# convert to numpy
-features = torch.cat(features).numpy()
-labels = torch.cat(labels_list).numpy()
 
-# move to GPU (RAPIDS)
-X_gpu = cp.asarray(features)
-y_gpu = cp.asarray(labels)
+# convert to RAPIDS
+X_gpu = cp.asarray(torch.cat(features).numpy())
+y_gpu = cp.asarray(torch.cat(labels_list).numpy())
 
-# RAPIDS model
 rf_model = RandomForestClassifier()
 rf_model.fit(X_gpu, y_gpu)
 
-print("RAPIDS model trained successfully")
 
-# testing
+# RAPIDS testing
 test_features = []
 test_labels = []
 
@@ -173,47 +229,85 @@ with torch.no_grad():
 
         x = model.pool(F.relu(model.conv1(images)))
         x = model.bn1(x)
-
         x = F.relu(model.conv2(x))
         x = model.pool(F.relu(model.conv3(x)))
         x = model.bn2(x)
-
         x = F.relu(model.conv4(x))
         x = F.relu(model.conv5(x))
-
         x = x.view(x.size(0), -1)
 
         test_features.append(x.cpu())
         test_labels.append(labels)
 
-# convert test data
-test_features = torch.cat(test_features).numpy()
-test_labels = torch.cat(test_labels).numpy()
 
-X_test_gpu = cp.asarray(test_features)
+X_test = cp.asarray(torch.cat(test_features).numpy())
+y_test = torch.cat(test_labels).numpy()
 
-# predictions
-preds = rf_model.predict(X_test_gpu)
-preds_cpu = cp.asnumpy(preds)
+preds = cp.asnumpy(rf_model.predict(X_test))
 
-# evaluation metrics
-accuracy = accuracy_score(test_labels, preds_cpu)
-precision = precision_score(test_labels, preds_cpu, average='weighted')
-recall = recall_score(test_labels, preds_cpu, average='weighted')
-f1 = f1_score(test_labels, preds_cpu, average='weighted')
-conf_matrix = confusion_matrix(test_labels, preds_cpu)
 
-print("\n===== RAPIDS MODEL EVALUATION =====")
-print(f"Accuracy : {accuracy:.4f}")
-print(f"Precision: {precision:.4f}")
-print(f"Recall   : {recall:.4f}")
-print(f"F1 Score : {f1:.4f}")
+# evaluation
+conf_matrix = confusion_matrix(y_test, preds)
 
-print("\nConfusion Matrix:\n", conf_matrix)
+print("\n===== FINAL RESULTS =====")
+print("CNN Accuracy    :", cnn_acc)
+print("RAPIDS Accuracy :", accuracy_score(y_test, preds))
 
-print("\nClassification Report:\n")
-print(classification_report(
-    test_labels,
-    preds_cpu,
-    target_names=train_data.classes
-))
+print(classification_report(y_test, preds, target_names=train_data.classes))
+
+
+# confusion matrix plot
+plt.figure(figsize=(8,6))
+sns.heatmap(conf_matrix, annot=True, fmt='d',
+            xticklabels=train_data.classes,
+            yticklabels=train_data.classes)
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.title("Confusion Matrix")
+plt.show()
+
+
+# accuracy plot
+plt.figure()
+plt.plot(train_acc_list, label="Train Accuracy")
+plt.plot(val_acc_list, label="Validation Accuracy")
+plt.legend()
+plt.title("Accuracy vs Epochs")
+plt.show()
+
+
+# loss plot
+plt.figure()
+plt.plot(loss_list)
+plt.title("Loss Curve")
+plt.show()
+
+
+# ROC curve
+y_bin = label_binarize(y_test, classes=list(range(len(train_data.classes))))
+probs = cp.asnumpy(rf_model.predict_proba(X_test))
+
+fpr, tpr, _ = roc_curve(y_bin[:,0], probs[:,0])
+plt.plot(fpr, tpr)
+plt.title("ROC Curve")
+plt.show()
+
+
+# prediction function
+def predict_image(img_path):
+    model.eval()
+
+    transform = transforms.Compose([
+        transforms.Resize((28,28)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
+    ])
+
+    img = Image.open(img_path).convert("RGB")
+    img = transform(img).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        out = model(img)
+        _, pred = torch.max(out, 1)
+
+    print("Predicted class:", train_data.classes[pred.item()])
