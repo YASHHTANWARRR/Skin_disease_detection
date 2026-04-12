@@ -1,10 +1,14 @@
 # Skin_disease_detection
-Skin cancer is a major and growing global health concern, with malignant melanoma being the most dangerous form. Early detection is critical for improving patient outcomes, yet conventional diagnosis through dermoscopic image inspection is subjective and depends heavily on a dermatologist’s expertise.The subtle visual differences between benign and malignant lesions often make reliable diagnosis challenging, highlighting the need for standardized, computer-assisted tools.
+Skin cancer is a severe and rising problem across the globe. In this case, melanoma is considered the most lethal type of cancer. Early diagnosis of this disease could significantly help patients recover better. Unfortunately, conventional techniques of detecting skin cancers based on dermoscopic images are highly subjective and require considerable skills from dermatologists due to similarities between benign and malignant skin lesions.
 
+Deep learning techniques, especially those using Convolutional Neural Networks (CNNs), offer a promising approach to solving the problem of accurate detection of skin cancers. Specifically, CNNs enable automatic learning of hierarchies of features from images, thus providing fast and objective results in diagnostics and acting as a supporting diagnostic tool.
 
-Deep learning, particularly Convolutional Neural Network (CNNs), offers a promising solution by automatically learning patterns from medical images. CNNs can identify complex features in dermoscopic data and provide rapid, objective predictions, making them an effective decision-support tool that may reduce[4] unnecessary biopsies and increase diagnostic confidence.
+This paper presents a new framework for the automated classification of skin lesions with CNN. The study relies on the HAM10000 dataset with seven different skin lesion types. One of the difficulties with this dataset is its class imbalance. To solve this issue, we used data resampling approaches for achieving more balanced learning.
 
-In this work a CNN-based framework has been proposed for automated skin lesion classification using the HAM10000 dataset, which includes seven[13] types of skin lesions. A key challenge of this dataset is its class imbalance, with rare lesion types underrepresented. To address this, we applied data resampling techniques to ensure balanced learning. Our custom CNN architecture integrates convolutional,[6] pooling, and normalization layers to capture hierarchical[9] image features. The model’s performance was evaluated using accuracy, loss, and a confusion matrix to assess classification reliability across all lesion classes.
+Model and Methodology
+Our framework employs convolutional, pooling, and normalization layers designed to identify image features in various levels of detail. Evaluation of model efficiency is performed through measuring accuracy, loss, and confusion matrices.
 
-The results demonstrate that CNN-based systems, when paired with proper data balancing, can serve as accurate and accessible diagnostic aids in dermatology.
+In order to increase the efficiency of computations, GPU acceleration using CUDA technology created by NVIDIA was used in the research, allowing for more rapid training due to parallelization in deep learning computations. Moreover, the use of RAPIDS was introduced to improve the speed of computations with the help of GPU acceleration in data processing.
+
+As it follows from the presented outcomes, neural network models based on convolutional layers are able to deliver efficient, accurate, and scalable models to detect skin diseases, thus being very useful in practice.
 
