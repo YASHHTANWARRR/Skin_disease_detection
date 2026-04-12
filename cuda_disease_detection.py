@@ -2,16 +2,14 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F 
-import time
+import torch.nn.functional as F
 
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
-import torch.nn.utils.prune as prune
 
-from cuml.ensemble import RandomForestClassifier
 import cupy as cp
+from cuml.ensemble import RandomForestClassifier
 
 from sklearn.metrics import (
     classification_report,
@@ -34,43 +32,27 @@ train_transform = transforms.Compose([
     transforms.ColorJitter(brightness=0.1, contrast=0.1,
                         saturation=0.1, hue=0.1),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                        std=[0.5, 0.5, 0.5])
+    transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
 ])
 
-val_transform = transforms.Compose([
+test_transform = transforms.Compose([
     transforms.Resize((28, 28)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                        std=[0.5, 0.5, 0.5])
+    transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
 ])
 
-test_transform = val_transform
-
-# dataset paths
-train_split = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\train'
-val_split   = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\val'
-test_split  = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\test'
+# dataset paths (FIX THESE)
+train_split = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_folder/train"
+test_split  = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_folder/test"
 
 # datasets and loaders
-train_data = ImageFolder(train_split,
-                        transform=train_transform)
-val_data   = ImageFolder(val_split,
-                        transform=val_transform)
-test_data  = ImageFolder(test_split,
-                        transform=test_transform)
+train_data = ImageFolder(train_split, transform=train_transform)
+test_data  = ImageFolder(test_split, transform=test_transform)
 
-train_loader = DataLoader(train_data,
-                        batch_size=32,
-                        shuffle=True)
-val_loader   = DataLoader(val_data,
-                        batch_size=32,
-                        shuffle=False)
-test_loader  = DataLoader(test_data, 
-                        batch_size=32,
-                        shuffle=False)
+train_loader = DataLoader(train_data, batch_size=8, shuffle=True)
+test_loader  = DataLoader(test_data, batch_size=8, shuffle=False)
 
-# model
+# model (YOUR ORIGINAL)
 class SkinLesionCNN(nn.Module):
     def __init__(self):
         super(SkinLesionCNN, self).__init__()
@@ -122,13 +104,11 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 print(model)
 
-# training
-epochs = 30
+# training (CNN)
+epochs = 5
 for epoch in range(epochs):
     model.train()
     running_loss = 0.0
-    correct = 0
-    total = 0
 
     for images, labels in train_loader:
         images, labels = images.to(device), labels.to(device)
@@ -139,134 +119,101 @@ for epoch in range(epochs):
         loss.backward()
         optimizer.step()
 
-        running_loss += loss.item() * images.size(0)
-        _, predicted = torch.max(outputs, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+        running_loss += loss.item()
 
-    train_loss = running_loss / len(train_data)
-    train_acc = 100 * correct / total
+    print(f"Epoch [{epoch+1}/{epochs}] Loss: {running_loss:.4f}")
 
-    model.eval()
-    val_loss = 0.0
-    val_correct = 0
-    val_total = 0
-
-    with torch.no_grad():
-        for images, labels in val_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-
-            val_loss += loss.item() * images.size(0)
-            _, predicted = torch.max(outputs, 1)
-            val_total += labels.size(0)
-            val_correct += (predicted == labels).sum().item()
-
-    val_loss /= len(val_data)
-    val_acc = 100 * val_correct / val_total
-
-    print(f"Epoch [{epoch+1}/{epochs}]")
-    print(f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.2f}%")
-    print(f"Val   Loss: {val_loss:.4f}, Val   Acc: {val_acc:.2f}%\n")
-
-
-#pruning and quantization added 
-for name, module in model.named_modules():
-    if isinstance(module, torch.nn.Conv2d) or isinstance(module, torch.nn.Linear):
-        prune.l1_unstructured(module, name="weight", amount=0.3)
-
-quantized_model = torch.quantization.quantize_dynamic(
-    model,                      
-    {torch.nn.Linear},          
-    dtype=torch.qint8
-)
-
-print("Quantization applied successfully")
-
-print("Pruning applied")
-# testing
+# feature extraction (IMPORTANT PART FOR RAPIDS)
 model.eval()
 
-start = time.time()
+features = []
+labels_list = []
 
 with torch.no_grad():
-    for images, _ in test_loader:
+    for images, labels in train_loader:
         images = images.to(device)
-        outputs = model(images)
 
-end = time.time()
-print("Original Model Time:", end - start)
+        # pass through conv layers ONLY
+        x = model.pool(F.relu(model.conv1(images)))
+        x = model.bn1(x)
 
-start = time.time()
+        x = F.relu(model.conv2(x))
+        x = model.pool(F.relu(model.conv3(x)))
+        x = model.bn2(x)
 
-with torch.no_grad():
-    for images, _ in test_loader:
-        images = images.to(device)
-        outputs = quantized_model(images)
+        x = F.relu(model.conv4(x))
+        x = F.relu(model.conv5(x))
 
-end = time.time()
-print("Quantized Model Time:", end - start)
+        x = x.view(x.size(0), -1)
 
-all_preds = []
-all_labels = []
+        features.append(x.cpu())
+        labels_list.append(labels)
+
+# convert to numpy
+features = torch.cat(features).numpy()
+labels = torch.cat(labels_list).numpy()
+
+# move to GPU (RAPIDS)
+X_gpu = cp.asarray(features)
+y_gpu = cp.asarray(labels)
+
+# RAPIDS model
+rf_model = RandomForestClassifier()
+rf_model.fit(X_gpu, y_gpu)
+
+print("RAPIDS model trained successfully")
+
+# testing
+test_features = []
+test_labels = []
 
 with torch.no_grad():
     for images, labels in test_loader:
-        images, labels = images.to(device), labels.to(device)
-        outputs = quantized_model(images)
-        _, preds = torch.max(outputs, 1)
-        all_preds.extend(preds.cpu().numpy())
-        all_labels.extend(labels.cpu().numpy())
+        images = images.to(device)
 
-accuracy = accuracy_score(all_labels, all_preds)
-precision = precision_score(all_labels, all_preds, average='weighted')
-recall = recall_score(all_labels, all_preds, average='weighted')
-f1 = f1_score(all_labels, all_preds, average='weighted')
-conf_matrix = confusion_matrix(all_labels, all_preds)
+        x = model.pool(F.relu(model.conv1(images)))
+        x = model.bn1(x)
 
-print("Accuracy :", accuracy)
-print("Precision:", precision)
-print("Recall   :", recall)
-print("F1 Score :", f1)
+        x = F.relu(model.conv2(x))
+        x = model.pool(F.relu(model.conv3(x)))
+        x = model.bn2(x)
+
+        x = F.relu(model.conv4(x))
+        x = F.relu(model.conv5(x))
+
+        x = x.view(x.size(0), -1)
+
+        test_features.append(x.cpu())
+        test_labels.append(labels)
+
+# convert test data
+test_features = torch.cat(test_features).numpy()
+test_labels = torch.cat(test_labels).numpy()
+
+X_test_gpu = cp.asarray(test_features)
+
+# predictions
+preds = rf_model.predict(X_test_gpu)
+preds_cpu = cp.asnumpy(preds)
+
+# evaluation metrics
+accuracy = accuracy_score(test_labels, preds_cpu)
+precision = precision_score(test_labels, preds_cpu, average='weighted')
+recall = recall_score(test_labels, preds_cpu, average='weighted')
+f1 = f1_score(test_labels, preds_cpu, average='weighted')
+conf_matrix = confusion_matrix(test_labels, preds_cpu)
+
+print("\n===== RAPIDS MODEL EVALUATION =====")
+print(f"Accuracy : {accuracy:.4f}")
+print(f"Precision: {precision:.4f}")
+print(f"Recall   : {recall:.4f}")
+print(f"F1 Score : {f1:.4f}")
+
 print("\nConfusion Matrix:\n", conf_matrix)
+
 print("\nClassification Report:\n")
-print(classification_report(all_labels, all_preds,
-                            target_names=train_data.classes))
-
-# save model
-torch.save(model.state_dict(), "Skin_disease_model.pth")
-print("Model saved successfully.")
-
-# RAPIDS RANDOM FOREST
-
-def flatten_loader(loader):
-    X = []
-    y = []
-    
-    for images, labels in loader:
-        images = images.view(images.size(0), -1)
-        X.append(images.numpy())
-        y.append(labels.numpy())
-    
-    X = np.concatenate(X)
-    y = np.concatenate(y)
-    
-    return X, y
-
-print("\nPreparing data for RAPIDS...")
-
-X_train, y_train = flatten_loader(train_loader)
-X_test, y_test = flatten_loader(test_loader)
-
-print("Training RAPIDS Random Forest...")
-
-rf_model = RandomForestClassifier(n_estimators=100)
-rf_model.fit(X_train, y_train)
-
-rf_preds = rf_model.predict(X_test)
-
-from sklearn.metrics import accuracy_score
-
-print("RAPIDS Random Forest Accuracy:",
-        accuracy_score(y_test, rf_preds))
+print(classification_report(
+    test_labels,
+    preds_cpu,
+    target_names=train_data.classes
+))

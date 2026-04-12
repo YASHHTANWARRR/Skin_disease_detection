@@ -43,9 +43,9 @@ val_transform = transforms.Compose([
 test_transform = val_transform
 
 # dataset paths
-train_split = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\train'
-val_split   = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\val'
-test_split  = r'C:\Users\Hp\Documents\dataset folders\skin disease dataset\6GB HAM10000 DATA\output_folder\test'
+train_split = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_folder/train"
+val_split   = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_folder/val"
+test_split  = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_folder/test"
 
 # datasets and loaders
 train_data = ImageFolder(train_split,
