@@ -119,7 +119,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 
 # training and validation
-epochs = 5
+epochs = 20
 train_acc_list = []
 val_acc_list = []
 loss_list = []
