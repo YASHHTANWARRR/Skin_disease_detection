@@ -1,18 +1,153 @@
-# Skin_disease_detection
-Skin cancer is a severe and rising problem across the globe. In this case, melanoma is considered the most lethal type of cancer. Early diagnosis of this disease could significantly help patients recover better. Unfortunately, conventional techniques of detecting skin cancers based on dermoscopic images are highly subjective and require considerable skills from dermatologists due to similarities between benign and malignant skin lesions.
+# 🧠 Skin Disease Detection (HAM10000 + Deep Learning)
 
-Deep learning techniques, especially those using Convolutional Neural Networks (CNNs), offer a promising approach to solving the problem of accurate detection of skin cancers. Specifically, CNNs enable automatic learning of hierarchies of features from images, thus providing fast and objective results in diagnostics and acting as a supporting diagnostic tool.
+This project builds a deep learning model to detect and classify **skin diseases** using the **HAM10000 dataset**, a large collection of dermatoscopic images.
 
-This paper presents a new framework for the automated classification of skin lesions with CNN. The study relies on the HAM10000 dataset with seven different skin lesion types. One of the difficulties with this dataset is its class imbalance. To solve this issue, we used data resampling approaches for achieving more balanced learning.
+---
 
-Model and Methodology
-Our framework employs convolutional, pooling, and normalization layers designed to identify image features in various levels of detail. Evaluation of model efficiency is performed through measuring accuracy, loss, and confusion matrices.
+## 🚀 Features
 
-In order to increase the efficiency of computations, GPU acceleration using CUDA technology created by NVIDIA was used in the research, allowing for more rapid training due to parallelization in deep learning computations. Moreover, the use of RAPIDS was introduced to improve the speed of computations with the help of GPU acceleration in data processing.
+* 🧠 Deep learning-based skin lesion classification
+* 📊 Multi-class classification of 7 skin disease categories
+* 🖼️ Image preprocessing and normalization
+* ⚡ GPU acceleration support (CUDA)
+* 📈 Evaluation using accuracy and classification metrics
 
-As it follows from the presented outcomes, neural network models based on convolutional layers are able to deliver efficient, accurate, and scalable models to detect skin diseases, thus being very useful in practice.
+---
 
+## 📂 Dataset
+
+**Dataset used:**
+👉 HAM10000 ("Human Against Machine with 10000 training images")
+
+The dataset contains **10,000+ dermatoscopic images** of common pigmented skin lesions.
+
+### 📁 Structure
+
+```id="6l3k5v"
+HAM10000/
+│── HAM10000_images_part_1/
+│── HAM10000_images_part_2/
+│── HAM10000_metadata.csv
+```
+
+### 📌 Classes
+
+| Label | Description                   |
+| ----- | ----------------------------- |
+| akiec | Actinic keratoses             |
+| bcc   | Basal cell carcinoma          |
+| bkl   | Benign keratosis-like lesions |
+| df    | Dermatofibroma                |
+| nv    | Melanocytic nevi              |
+| mel   | Melanoma                      |
+| vasc  | Vascular lesions              |
+
+---
+
+## ⚙️ Installation
+
+### 1. Create Environment
+
+```bash id="p7v9xz"
+conda create -n skin_detect python=3.10 -y
+conda activate skin_detect
+```
+
+### 2. Install Dependencies
+
+```bash id="0db23w"
+pip install torch torchvision numpy pandas matplotlib scikit-learn pillow
+```
+
+---
+
+## 🧠 Model Architecture
+
+* Model: **Convolutional Neural Network (CNN)**
+* Designed for multi-class classification
+
+```python id="4k5h2u"
+import torch.nn as nn
+
+model = nn.Sequential(
+    nn.Conv2d(3, 32, kernel_size=3),
+    nn.ReLU(),
+    nn.MaxPool2d(2),
+    nn.Conv2d(32, 64, kernel_size=3),
+    nn.ReLU(),
+    nn.MaxPool2d(2),
+    nn.Flatten(),
+    nn.Linear(64*X*X, 128),
+    nn.ReLU(),
+    nn.Linear(128, 7)
+)
+```
+
+---
+
+## 🏃 Training
+
+Run training script:
+
+```bash id="e1o7bx"
+python train.py
+```
+
+### Default Settings
+
+* Batch size: 16
+* Epochs: 10–20
+* Optimizer: Adam
+* Learning rate: 0.001
+
+---
+
+## 📊 Evaluation
+
+* Accuracy
+* Confusion Matrix
+* Classification Report (Precision, Recall, F1-score)
+
+* 
 <img width="800" height="600" alt="RAPIDS_CODE_CONFUSION_MATRIX" src="https://github.com/user-attachments/assets/59a6dfb0-9d3f-4062-b775-36e1863decef" />
 <img width="640" height="480" alt="ROC_CURVE_RAPIDS" src="https://github.com/user-attachments/assets/5c6aca88-5985-4ba5-81e6-e12cba1bb602" />
 <img width="640" height="480" alt="LOSS_CURVE_RAPIDS" src="https://github.com/user-attachments/assets/7a6c92a6-2d79-4f9f-8a32-6fd890b9c3d3" />
 <img width="640" height="480" alt="ACCURACY_VS_EPOCH_RAPIDS" src="https://github.com/user-attachments/assets/2a8751e8-c9ac-4eb1-8fad-1df90bef7d84" />
+
+---
+
+## 🧠 Key Learnings
+
+* Medical datasets are often **imbalanced across classes**
+* Data augmentation improves performance significantly
+* CNNs are effective for dermatological image classification
+* Preprocessing plays a crucial role in model accuracy
+
+---
+
+## ⚠️ Hardware Requirements
+
+* GPU recommended (4GB+ VRAM)
+* CPU supported (slower training)
+
+---
+
+## 📈 Future Improvements
+
+* 🔥 Transfer learning (EfficientNet / ResNet)
+* 🔥 Grad-CAM visualization
+* 🔥 Web app deployment (Streamlit)
+* 🔥 Dataset balancing techniques
+
+---
+
+## 🤝 Contributing
+
+Pull requests are welcome. For major changes, open an issue first.
+
+---
+
+## 📜 License
+
+This project is for educational and research purposes.
+
