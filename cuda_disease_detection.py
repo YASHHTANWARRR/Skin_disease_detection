@@ -56,13 +56,13 @@ val_data   = ImageFolder(val_split, transform=val_transform)
 test_data  = ImageFolder(test_split, transform=val_transform)
 
 train_loader = DataLoader(train_data, batch_size=32, shuffle=True,
-                          num_workers=4, pin_memory=True)
+                            num_workers=4, pin_memory=True)
 
 val_loader   = DataLoader(val_data, batch_size=32, shuffle=False,
-                          num_workers=4, pin_memory=True)
+                            num_workers=4, pin_memory=True)
 
 test_loader  = DataLoader(test_data, batch_size=32, shuffle=False,
-                          num_workers=4, pin_memory=True)
+                            num_workers=4, pin_memory=True)
 
 
 # model
