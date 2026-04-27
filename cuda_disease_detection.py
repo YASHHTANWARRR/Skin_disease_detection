@@ -16,7 +16,7 @@ from sklearn.metrics import (
     confusion_matrix,
     accuracy_score
 )
-
+from torch.utils.data import WeightedRandomSampler
 import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
@@ -44,7 +44,7 @@ print("Using device:", device)
 
 # transforms
 train_transform = transforms.Compose([
-    transforms.Resize((28, 28)),
+    transforms.Resize((128, 128)),# was (28,28) but increased to (128,128) for better performance. Adjust as needed.
     transforms.RandomHorizontalFlip(p=0.5),
     transforms.RandomRotation(15),
     transforms.ToTensor(),
@@ -52,7 +52,7 @@ train_transform = transforms.Compose([
 ])
 
 val_transform = transforms.Compose([
-    transforms.Resize((28, 28)),
+    transforms.Resize((128, 128)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
 ])
@@ -69,7 +69,19 @@ train_data = ImageFolder(train_split, transform=train_transform)
 val_data   = ImageFolder(val_split, transform=val_transform)
 test_data  = ImageFolder(test_split, transform=val_transform)
 
-train_loader = DataLoader(train_data, batch_size=32, shuffle=True,
+# class imbalance handling
+class_counts = np.bincount(train_data.targets)
+class_weights = len(train_data.targets) / (len(class_counts) * class_counts)
+
+class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
+
+weights = 1. / class_counts
+sample_weights = weights[train_data.targets]
+
+sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
+
+
+train_loader = DataLoader(train_data, batch_size=64, sampler=sampler,
                             num_workers=4, pin_memory=True)
 
 val_loader   = DataLoader(val_data, batch_size=32, shuffle=False,
@@ -95,9 +107,9 @@ class SkinLesionCNN(nn.Module):
         self.conv5 = nn.Conv2d(128, 256, 3, padding=1)
 
         self.pool = nn.MaxPool2d(2, 2)
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.5)# added dropout Adjust rate from 0.3 to 0.5 after run 1.
 
-        self.fc1 = nn.Linear(256 * 7 * 7, 256)
+        self.fc1 = nn.Linear(256 * 32 * 32, 256)# was 256 * 7 * 7, but changed to 256 * 32 * 32 due to increased input size. Adjust as needed.
         self.fc2 = nn.Linear(256, 128)
         self.fc3 = nn.Linear(128, 64)
         self.fc4 = nn.Linear(64, 32)
@@ -127,12 +139,12 @@ class SkinLesionCNN(nn.Module):
 
 # initialization
 model = SkinLesionCNN().to(device)
-criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+criterion = nn.CrossEntropyLoss(weight=class_weights)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.0003)#lr was 0.001, but reduced to 0.0003 for better convergence. Adjust as needed.
 
 
 # training and validation
-epochs = 20
+epochs = 40 # first iteration was 20, but increased to 40 for better performance. Adjust as needed.
 
 for epoch in range(epochs):
     model.train()
@@ -223,7 +235,11 @@ with torch.no_grad():
 X_gpu = cp.asarray(torch.cat(features).cpu().numpy())
 y_gpu = cp.asarray(torch.cat(labels_list).cpu().numpy())
 
-rf_model = RandomForestClassifier()
+rf_model = RandomForestClassifier(
+    n_estimators=300,
+    max_depth=25,
+    max_features='sqrt'
+)
 rf_model.fit(X_gpu, y_gpu)
 
 
@@ -261,7 +277,12 @@ print("CNN Accuracy    :", cnn_acc)
 rapids_acc = accuracy_score(y_test, preds)
 print("RAPIDS Accuracy :", rapids_acc)
 
-report = classification_report(y_test, preds, target_names=train_data.classes)
+
+report = classification_report(
+    y_test, preds,
+    target_names=train_data.classes,
+    zero_division=0
+)
 print(report)
 
 
@@ -308,7 +329,7 @@ def predict_image(img_path):
     model.eval()
 
     transform = transforms.Compose([
-        transforms.Resize((28,28)),
+        transforms.Resize((128,128)),# was (28,28) but increased to (128,128) for better performance. Adjust as needed.
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.5]*3, std=[0.5]*3)
     ])
