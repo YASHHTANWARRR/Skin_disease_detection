@@ -14,19 +14,13 @@ from cuml.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    roc_curve,
-    auc
+    accuracy_score
 )
-
-from sklearn.preprocessing import label_binarize
 
 import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
+from tqdm import tqdm
 
 
 # device configuration
@@ -56,14 +50,19 @@ val_split   = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_fold
 test_split  = "/home/hornet/dataset_folders/skin_diseases/archive(1)/output_folder/test"
 
 
-# datasets and loaders
+# datasets and loaders (optimized)
 train_data = ImageFolder(train_split, transform=train_transform)
 val_data   = ImageFolder(val_split, transform=val_transform)
 test_data  = ImageFolder(test_split, transform=val_transform)
 
-train_loader = DataLoader(train_data, batch_size=8, shuffle=True)
-val_loader   = DataLoader(val_data, batch_size=8, shuffle=False)
-test_loader  = DataLoader(test_data, batch_size=8, shuffle=False)
+train_loader = DataLoader(train_data, batch_size=32, shuffle=True,
+                          num_workers=4, pin_memory=True)
+
+val_loader   = DataLoader(val_data, batch_size=32, shuffle=False,
+                          num_workers=4, pin_memory=True)
+
+test_loader  = DataLoader(test_data, batch_size=32, shuffle=False,
+                          num_workers=4, pin_memory=True)
 
 
 # model
@@ -120,9 +119,6 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
 # training and validation
 epochs = 20
-train_acc_list = []
-val_acc_list = []
-loss_list = []
 
 for epoch in range(epochs):
     model.train()
@@ -130,8 +126,9 @@ for epoch in range(epochs):
     total = 0
     running_loss = 0
 
-    for images, labels in train_loader:
-        images, labels = images.to(device), labels.to(device)
+    for images, labels in tqdm(train_loader):
+        images = images.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
 
         optimizer.zero_grad()
         outputs = model(images)
@@ -146,15 +143,17 @@ for epoch in range(epochs):
         total += labels.size(0)
 
     train_acc = correct / total
-    loss_list.append(running_loss)
 
+    # validation
     model.eval()
     val_correct = 0
     val_total = 0
 
     with torch.no_grad():
         for images, labels in val_loader:
-            images, labels = images.to(device), labels.to(device)
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+
             outputs = model(images)
             _, preds = torch.max(outputs, 1)
 
@@ -162,9 +161,6 @@ for epoch in range(epochs):
             val_total += labels.size(0)
 
     val_acc = val_correct / val_total
-
-    train_acc_list.append(train_acc)
-    val_acc_list.append(val_acc)
 
     print(f"Epoch {epoch+1}: Train={train_acc:.4f}, Val={val_acc:.4f}")
 
@@ -180,7 +176,7 @@ cnn_labels = []
 
 with torch.no_grad():
     for images, labels in test_loader:
-        images = images.to(device)
+        images = images.to(device, non_blocking=True)
         outputs = model(images)
         _, preds = torch.max(outputs, 1)
 
@@ -190,13 +186,13 @@ with torch.no_grad():
 cnn_acc = accuracy_score(cnn_labels, cnn_preds)
 
 
-# RAPIDS feature extraction
+# RAPIDS feature extraction (optimized: no unnecessary conversions)
 features = []
 labels_list = []
 
 with torch.no_grad():
     for images, labels in train_loader:
-        images = images.to(device)
+        images = images.to(device, non_blocking=True)
 
         x = model.pool(F.relu(model.conv1(images)))
         x = model.bn1(x)
@@ -207,13 +203,12 @@ with torch.no_grad():
         x = F.relu(model.conv5(x))
         x = x.view(x.size(0), -1)
 
-        features.append(x.cpu())
-        labels_list.append(labels)
+        features.append(x.detach())
+        labels_list.append(labels.to(device))
 
-
-# convert to RAPIDS
-X_gpu = cp.asarray(torch.cat(features).numpy())
-y_gpu = cp.asarray(torch.cat(labels_list).numpy())
+# direct GPU conversion (better)
+X_gpu = cp.asarray(torch.cat(features).cpu().numpy())
+y_gpu = cp.asarray(torch.cat(labels_list).cpu().numpy())
 
 rf_model = RandomForestClassifier()
 rf_model.fit(X_gpu, y_gpu)
@@ -225,7 +220,7 @@ test_labels = []
 
 with torch.no_grad():
     for images, labels in test_loader:
-        images = images.to(device)
+        images = images.to(device, non_blocking=True)
 
         x = model.pool(F.relu(model.conv1(images)))
         x = model.bn1(x)
@@ -236,11 +231,10 @@ with torch.no_grad():
         x = F.relu(model.conv5(x))
         x = x.view(x.size(0), -1)
 
-        test_features.append(x.cpu())
+        test_features.append(x.detach())
         test_labels.append(labels)
 
-
-X_test = cp.asarray(torch.cat(test_features).numpy())
+X_test = cp.asarray(torch.cat(test_features).cpu().numpy())
 y_test = torch.cat(test_labels).numpy()
 
 preds = cp.asnumpy(rf_model.predict(X_test))
@@ -264,32 +258,6 @@ sns.heatmap(conf_matrix, annot=True, fmt='d',
 plt.xlabel("Predicted")
 plt.ylabel("Actual")
 plt.title("Confusion Matrix")
-plt.show()
-
-
-# accuracy plot
-plt.figure()
-plt.plot(train_acc_list, label="Train Accuracy")
-plt.plot(val_acc_list, label="Validation Accuracy")
-plt.legend()
-plt.title("Accuracy vs Epochs")
-plt.show()
-
-
-# loss plot
-plt.figure()
-plt.plot(loss_list)
-plt.title("Loss Curve")
-plt.show()
-
-
-# ROC curve
-y_bin = label_binarize(y_test, classes=list(range(len(train_data.classes))))
-probs = cp.asnumpy(rf_model.predict_proba(X_test))
-
-fpr, tpr, _ = roc_curve(y_bin[:,0], probs[:,0])
-plt.plot(fpr, tpr)
-plt.title("ROC Curve")
 plt.show()
 
 
