@@ -21,6 +21,20 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from PIL import Image
 from tqdm import tqdm
+import pandas as pd
+
+# output directory + auto run versioning
+base_output = "output_results"
+os.makedirs(base_output, exist_ok=True)
+
+# auto increment run folder
+existing_runs = [d for d in os.listdir(base_output) if d.startswith("run_")]
+run_id = len(existing_runs) + 1
+
+run_dir = os.path.join(base_output, f"run_{run_id}")
+os.makedirs(run_dir, exist_ok=True)
+
+print(f"Saving results to: {run_dir}")
 
 
 # device configuration
@@ -166,7 +180,7 @@ for epoch in range(epochs):
 
 
 # save model
-torch.save(model.state_dict(), "cnn_model.pth")
+torch.save(model.state_dict(), os.path.join(run_dir, "model.pth"))
 
 
 # test CNN
@@ -186,7 +200,7 @@ with torch.no_grad():
 cnn_acc = accuracy_score(cnn_labels, cnn_preds)
 
 
-# RAPIDS feature extraction (optimized: no unnecessary conversions)
+# RAPIDS feature extraction
 features = []
 labels_list = []
 
@@ -206,7 +220,6 @@ with torch.no_grad():
         features.append(x.detach())
         labels_list.append(labels.to(device))
 
-# direct GPU conversion (better)
 X_gpu = cp.asarray(torch.cat(features).cpu().numpy())
 y_gpu = cp.asarray(torch.cat(labels_list).cpu().numpy())
 
@@ -245,9 +258,16 @@ conf_matrix = confusion_matrix(y_test, preds)
 
 print("\n===== FINAL RESULTS =====")
 print("CNN Accuracy    :", cnn_acc)
-print("RAPIDS Accuracy :", accuracy_score(y_test, preds))
+rapids_acc = accuracy_score(y_test, preds)
+print("RAPIDS Accuracy :", rapids_acc)
 
-print(classification_report(y_test, preds, target_names=train_data.classes))
+report = classification_report(y_test, preds, target_names=train_data.classes)
+print(report)
+
+
+# save metrics
+with open(os.path.join(run_dir, "metrics.txt"), "w") as f:
+    f.write(report)
 
 
 # confusion matrix plot
@@ -255,10 +275,32 @@ plt.figure(figsize=(8,6))
 sns.heatmap(conf_matrix, annot=True, fmt='d',
             xticklabels=train_data.classes,
             yticklabels=train_data.classes)
+
 plt.xlabel("Predicted")
 plt.ylabel("Actual")
 plt.title("Confusion Matrix")
-plt.show()
+
+plt.savefig(os.path.join(run_dir, "confusion_matrix.png"))
+plt.close()
+
+# AUTO COMPARISON CSV
+summary_path = os.path.join(base_output, "summary.csv")
+
+new_row = {
+    "run": run_id,
+    "cnn_acc": cnn_acc,
+    "rapids_acc": rapids_acc
+}
+
+if os.path.exists(summary_path):
+    df = pd.read_csv(summary_path)
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+else:
+    df = pd.DataFrame([new_row])
+
+df.to_csv(summary_path, index=False)
+
+print("\nSaved comparison to summary.csv")
 
 
 # prediction function
