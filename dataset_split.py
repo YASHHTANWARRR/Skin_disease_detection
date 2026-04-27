@@ -48,7 +48,7 @@ def copy_images(df, split_name):
         elif os.path.exists(path2):
             src_path = path2
         else:
-            print(f"❌ Missing file: {image_id}")
+            print(f"Missing file: {image_id}")
             continue
 
         # use your output_dir here
