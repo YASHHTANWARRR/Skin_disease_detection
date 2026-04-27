@@ -1,7 +1,7 @@
 import os
 import shutil
-import cudf
-from cuml.model_selection import train_test_split
+import pandas as pd
+from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
 # directories
@@ -19,10 +19,10 @@ for split in splits:
     for cls in classes:
         os.makedirs(os.path.join(output_dir, split, cls), exist_ok=True)
 
-# load dataframe (GPU)
-df = cudf.read_csv(csv_dir)
+# load dataframe (CPU - correct for this task)
+df = pd.read_csv(csv_dir)
 
-# train / val / test split
+# train / val / test split (correct stratified split)
 train_df, temp_df = train_test_split(
     df, test_size=0.30, stratify=df['dx'], random_state=42
 )
@@ -30,11 +30,6 @@ train_df, temp_df = train_test_split(
 val_df, test_df = train_test_split(
     temp_df, test_size=0.50, stratify=temp_df['dx'], random_state=42
 )
-
-# convert to pandas for iteration (file ops are CPU anyway)
-train_df = train_df.to_pandas()
-val_df = val_df.to_pandas()
-test_df = test_df.to_pandas()
 
 def copy_images(df, split_name):
     for _, row in tqdm(df.iterrows(), total=len(df)):
