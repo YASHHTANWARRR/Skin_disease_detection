@@ -81,7 +81,7 @@ sample_weights = weights[train_data.targets]
 sampler = WeightedRandomSampler(sample_weights, len(sample_weights))
 
 
-train_loader = DataLoader(train_data, batch_size=64, sampler=sampler,
+train_loader = DataLoader(train_data, batch_size=32, sampler=sampler,
                             num_workers=4, pin_memory=True)
 
 val_loader   = DataLoader(val_data, batch_size=32, shuffle=False,
