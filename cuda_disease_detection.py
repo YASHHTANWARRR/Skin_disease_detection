@@ -211,6 +211,7 @@ with torch.no_grad():
 
 cnn_acc = accuracy_score(cnn_labels, cnn_preds)
 
+torch.cuda.empty_cache()  #  FIX: clear GPU memory before feature extraction
 
 # RAPIDS feature extraction
 features = []
@@ -229,8 +230,12 @@ with torch.no_grad():
         x = F.relu(model.conv5(x))
         x = x.view(x.size(0), -1)
 
-        features.append(x.detach())
-        labels_list.append(labels.to(device))
+        features.append(x.detach().cpu())   # FIX: move features to CPU
+        labels_list.append(labels.cpu())    #  FIX: keep labels on CPU
+
+        del x                                #  FIX: free tensor
+        torch.cuda.empty_cache()             #  FIX: prevent GPU memory buildup
+        
 
 X_gpu = cp.asarray(torch.cat(features).cpu().numpy())
 y_gpu = cp.asarray(torch.cat(labels_list).cpu().numpy())
@@ -260,8 +265,11 @@ with torch.no_grad():
         x = F.relu(model.conv5(x))
         x = x.view(x.size(0), -1)
 
-        test_features.append(x.detach())
-        test_labels.append(labels)
+        test_features.append(x.detach().cpu())   # FIX: move to CPU
+        test_labels.append(labels) 
+        
+        del x                                    # FIX
+        torch.cuda.empty_cache()                 # FIX
 
 X_test = cp.asarray(torch.cat(test_features).cpu().numpy())
 y_test = torch.cat(test_labels).numpy()
