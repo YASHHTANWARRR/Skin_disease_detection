@@ -11,6 +11,7 @@ from torchvision.datasets import ImageFolder
 import cupy as cp
 from cuml.ensemble import RandomForestClassifier
 
+from sklearn.ensemble import RandomForestClassifier 
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
@@ -237,8 +238,8 @@ with torch.no_grad():
         torch.cuda.empty_cache()             #  FIX: prevent GPU memory buildup
         
 
-X_gpu = cp.asarray(torch.cat(features).cpu().numpy())
-y_gpu = cp.asarray(torch.cat(labels_list).cpu().numpy())
+X_gpu = torch.cat(features).numpy()   # 🔴 FIX: stay on CPU
+y_gpu = torch.cat(labels_list).numpy()
 
 rf_model = RandomForestClassifier(
     n_estimators=300,
