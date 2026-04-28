@@ -144,8 +144,8 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.0003)#lr was 0.001, but re
 
 
 # training and validation
-epochs = 40 # first iteration was 20, but increased to 40 for better performance. Adjust as needed.
-
+epochs = 30 # first iteration was 20, but increased to 40 for better performance. Adjust as needed.
+#changes to 30 epochs for faster testing. Can increase to 40 or more for better performance after initial runs.
 for epoch in range(epochs):
     model.train()
     correct = 0
