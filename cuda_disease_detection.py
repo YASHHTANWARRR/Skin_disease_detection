@@ -271,7 +271,7 @@ with torch.no_grad():
         del x                                    # FIX
         torch.cuda.empty_cache()                 # FIX
 
-X_test = cp.asarray(torch.cat(test_features).cpu().numpy())
+X_test = torch.cat(test_features).numpy()
 y_test = torch.cat(test_labels).numpy()
 
 preds = cp.asnumpy(rf_model.predict(X_test))
