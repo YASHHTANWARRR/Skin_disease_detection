@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F 
+import time
 
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -39,7 +40,10 @@ print(f"Saving results to: {run_dir}")
 
 
 # device configuration
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+USE_GPU = False
+device = torch.device(
+    "cuda" if USE_GPU and torch.cuda.is_available() else "cpu"
+)
 print("Using device:", device)
 
 
@@ -142,7 +146,7 @@ class SkinLesionCNN(nn.Module):
 model = SkinLesionCNN().to(device)
 criterion = nn.CrossEntropyLoss(weight=class_weights)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.0003)#lr was 0.001, but reduced to 0.0003 for better convergence. Adjust as needed.
-
+start_time = time.time()
 
 # training and validation
 epochs = 30 # first iteration was 20, but increased to 40 for better performance. Adjust as needed.
@@ -189,7 +193,33 @@ for epoch in range(epochs):
 
     val_acc = val_correct / val_total
 
-    print(f"Epoch {epoch+1}: Train={train_acc:.4f}, Val={val_acc:.4f}")
+    print(f"Epoch {epoch+1}: Train={train_acc:.4f}, Val={val_acc:.4f}")\
+
+#time mesuring 
+end_time = time.time()
+training_time = end_time - start_time
+print(f"Training Time: {training_time:.2f} seconds")
+
+#onnx export 
+# export to ONNX
+dummy_input = torch.randn(1, 3, 128, 128).to(device)
+
+torch.onnx.export(
+    model,
+    dummy_input,
+    os.path.join(run_dir, "skin_model.onnx"),
+    export_params=True,
+    opset_version=11,
+    do_constant_folding=True,
+    input_names=['input'],
+    output_names=['output'],
+    dynamic_axes={
+        'input': {0: 'batch_size'},
+        'output': {0: 'batch_size'}
+    }
+)
+
+print("ONNX model exported successfully")
 
 
 # save model
@@ -238,7 +268,7 @@ with torch.no_grad():
         torch.cuda.empty_cache()             #  FIX: prevent GPU memory buildup
         
 
-X_gpu = torch.cat(features).numpy()   # 🔴 FIX: stay on CPU
+X_gpu = torch.cat(features).numpy()   # FIX: stay on CPU
 y_gpu = torch.cat(labels_list).numpy()
 
 rf_model = RandomForestClassifier(
@@ -316,10 +346,14 @@ plt.close()
 # AUTO COMPARISON CSV
 summary_path = os.path.join(base_output, "summary.csv")
 
+#comparsion data
 new_row = {
     "run": run_id,
+    "device": str(device),
     "cnn_acc": cnn_acc,
-    "rapids_acc": rapids_acc
+    "rapids_acc": rapids_acc,
+    "training_time_sec": training_time,
+    "inference_time_sec": inference_time
 }
 
 if os.path.exists(summary_path):
@@ -346,8 +380,18 @@ def predict_image(img_path):
     img = Image.open(img_path).convert("RGB")
     img = transform(img).unsqueeze(0).to(device)
 
-    with torch.no_grad():
-        out = model(img)
-        _, pred = torch.max(out, 1)
+
+    # ONNX inference
+    ort_session = ort.InferenceSession(
+        onnx_path,
+        providers=['CUDAExecutionProvider']
+    )
+
+    outputs = ort_session.run(
+        None,
+        {'input': img.numpy()}
+    )
+
+    pred = np.argmax(outputs[0])
 
     print("Predicted class:", train_data.classes[pred.item()])
