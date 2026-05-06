@@ -107,8 +107,7 @@ python train.py
 * Accuracy
 * Confusion Matrix
 * Classification Report (Precision, Recall, F1-score)
-
-* 
+ 
 <img width="800" height="600" alt="RAPIDS_CODE_CONFUSION_MATRIX" src="https://github.com/user-attachments/assets/59a6dfb0-9d3f-4062-b775-36e1863decef" />
 <img width="640" height="480" alt="ROC_CURVE_RAPIDS" src="https://github.com/user-attachments/assets/5c6aca88-5985-4ba5-81e6-e12cba1bb602" />
 <img width="640" height="480" alt="LOSS_CURVE_RAPIDS" src="https://github.com/user-attachments/assets/7a6c92a6-2d79-4f9f-8a32-6fd890b9c3d3" />
