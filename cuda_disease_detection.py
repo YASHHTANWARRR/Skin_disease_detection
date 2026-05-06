@@ -10,9 +10,9 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 
 import cupy as cp
-from cuml.ensemble import RandomForestClassifier
+from cuml.ensemble import RandomForestClassifier as cuRF
 
-from sklearn.ensemble import RandomForestClassifier 
+from sklearn.ensemble import RandomForestClassifier as skRF
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
@@ -24,6 +24,16 @@ import seaborn as sns
 from PIL import Image
 from tqdm import tqdm
 import pandas as pd
+
+import onnx
+import onnxruntime as ort
+
+#will use this later for ONNX export and inference testing. For now, just saving the model in PyTorch format.
+#onnx_path = os.path.join(run_dir, "skin_model.onnx")
+#torch.onnx.export(
+#    model,
+#    dummy_input,
+#    onnx_path,
 
 # output directory + auto run versioning
 base_output = "output_results"
@@ -193,7 +203,7 @@ for epoch in range(epochs):
 
     val_acc = val_correct / val_total
 
-    print(f"Epoch {epoch+1}: Train={train_acc:.4f}, Val={val_acc:.4f}")\
+    print(f"Epoch {epoch+1}: Train={train_acc:.4f}, Val={val_acc:.4f}")
 
 #time mesuring 
 end_time = time.time()
@@ -203,6 +213,8 @@ print(f"Training Time: {training_time:.2f} seconds")
 #onnx export 
 # export to ONNX
 dummy_input = torch.randn(1, 3, 128, 128).to(device)
+
+onnx_path = os.path.join(run_dir, "skin_model.onnx")
 
 torch.onnx.export(
     model,
@@ -225,6 +237,8 @@ print("ONNX model exported successfully")
 # save model
 torch.save(model.state_dict(), os.path.join(run_dir, "model.pth"))
 
+#infernce time mesuring
+infer_start = time.time()
 
 # test CNN
 model.eval()
@@ -243,6 +257,10 @@ with torch.no_grad():
 cnn_acc = accuracy_score(cnn_labels, cnn_preds)
 
 torch.cuda.empty_cache()  #  FIX: clear GPU memory before feature extraction
+
+infer_end = time.time()
+inference_time = infer_end - infer_start
+print(f"Inference Time: {inference_time:.2f} seconds")
 
 # RAPIDS feature extraction
 features = []
@@ -271,7 +289,7 @@ with torch.no_grad():
 X_gpu = torch.cat(features).numpy()   # FIX: stay on CPU
 y_gpu = torch.cat(labels_list).numpy()
 
-rf_model = RandomForestClassifier(
+rf_model = cuRF(
     n_estimators=300,
     max_depth=25,
     max_features='sqrt'
@@ -389,9 +407,9 @@ def predict_image(img_path):
 
     outputs = ort_session.run(
         None,
-        {'input': img.numpy()}
+        {'input': img.cpu().numpy()}
     )
 
     pred = np.argmax(outputs[0])
 
-    print("Predicted class:", train_data.classes[pred.item()])
+    print("Predicted class:", train_data.classes[pred])
